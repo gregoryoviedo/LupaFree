@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">Lupa Free</string>
+    <string name="permission_required_message">Se necesita acceso a la cámara para usar la lupa.</string>
+    <string name="grant_permission_button">Conceder permiso</string>
+    <string name="open_settings_button">Abrir ajustes</string>
+    <string name="torch_content_description">Linterna</string>
+    <string name="freeze_content_description">Pausar</string>
+    <string name="resume_content_description">Reanudar</string>
+    <string name="zoom_label">Zoom</string>
+    <string name="more_options_content_description">Más opciones</string>
+    <string name="menu_license">Licencia (MIT)</string>
+    <string name="menu_permissions">Permisos</string>
+    <string name="menu_github">GitHub</string>
+    <string name="menu_donate">Donar</string>
+    <string name="license_dialog_title">Licencia MIT</string>
+    <string name="license_dialog_close">Cerrar</string>
+    <string name="no_browser_available">No se pudo abrir el enlace</string>
 </resources>
