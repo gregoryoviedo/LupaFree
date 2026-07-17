@@ -13,6 +13,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Requisitos](#requisitos)
 - [Compilar e instalar](#compilar-e-instalar)
+- [Build de release (producción)](#build-de-release-producción)
 - [Uso](#uso)
 - [Permisos](#permisos)
 - [Configuración](#configuración)
@@ -204,6 +205,88 @@ LupaFree/
 1. `File → Open` → seleccionar la carpeta del proyecto.
 2. Esperar a que Gradle termine la sincronización.
 3. `Run → Run 'app'` (Shift+F10) con un dispositivo/emulador conectado.
+
+---
+
+## Build de release (producción)
+
+El build de release aplica **R8** (minificación y obfuscación) + **resource shrinking**, y firma el APK con un keystore propio. El resultado es un APK de ~5 MB listo para distribuir.
+
+### 1. Generar el keystore (una sola vez)
+
+```bash
+mkdir -p ~/keystores
+keytool -genkey -v \
+  -keystore ~/keystores/lupafree-release.keystore \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000 \
+  -alias lupafree \
+  -storepass <TU_PASSWORD> \
+  -keypass <TU_PASSWORD> \
+  -dname "CN=Lupa Free, O=Lupa Free Contributors, L=<TU_CIUDAD>, ST=<TU_ESTADO>, C=<TU_PAIS_ISO2>"
+```
+
+> 🔒 **Guarda el keystore y la contraseña en un lugar seguro** (gestor de contraseñas, copia offline cifrada). Si los pierdes no podrás actualizar la app en Play Store — Google te obligará a publicarla como app nueva con un `applicationId` distinto.
+
+### 2. Configurar las credenciales (fuera del repo)
+
+Añade las siguientes variables a `~/.gradle/gradle.properties` (NO al `gradle.properties` del proyecto):
+
+```properties
+LUPAFREE_KEYSTORE_PATH=/Users/<tu_usuario>/keystores/lupafree-release.keystore
+LUPAFREE_KEYSTORE_PASSWORD=<TU_PASSWORD>
+LUPAFREE_KEY_ALIAS=lupafree
+LUPAFREE_KEY_PASSWORD=<TU_PASSWORD>
+```
+
+El `app/build.gradle.kts` las lee con `providers.gradleProperty(...)` y `System.getenv(...)` como fallback. Así las credenciales nunca se commitean.
+
+### 3. Compilar el APK firmado
+
+```bash
+./gradlew :app:assembleRelease
+```
+
+Resultado:
+
+| Archivo | Tamaño aprox. | Notas |
+|---|---|---|
+| `app/build/outputs/apk/release/app-release.apk` | ~5 MB | Firmado con tu keystore, R8 activo |
+
+> Si el keystore no existe, el build produce `app-release-unsigned.apk` (sin firmar, `adb install` lo rechaza). El build NO falla — degrada silenciosamente.
+
+### 4. Instalar en un dispositivo físico
+
+```bash
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+### 5. Verificar la firma (opcional)
+
+```bash
+$ANDROID_HOME/build-tools/<version>/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+Debe mostrar el DN que pusiste en el paso 1.
+
+### Comparativa de tamaños
+
+| Build | Tamaño | R8 | Recursos | Firmado |
+|---|---:|:---:|:---:|:---:|
+| `assembleDebug` | ~68 MB | ❌ | ❌ | ❌ (debug key) |
+| `assembleRelease` | ~5 MB | ✅ | ✅ | ✅ |
+
+### Subir a Play Store
+
+1. Crea la app en [Google Play Console](https://play.google.com/console).
+2. Activa **Play App Signing** (recomendado): Google guarda una copia de seguridad de tu clave y la usa para firmar las actualizaciones que subas.
+3. Sube `app-release.apk` o, preferiblemente, genera un **Android App Bundle**:
+   ```bash
+   ./gradlew :app:bundleRelease
+   # Resultado: app/build/outputs/bundle/release/app-release.aab
+   ```
+   El AAB es el formato que Google prefiere desde agosto de 2021 — genera APKs optimizados por dispositivo en su servidor.
 
 ---
 

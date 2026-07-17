@@ -17,6 +17,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = providers.gradleProperty("LUPAFREE_KEYSTORE_PATH").orNull
+                ?: System.getenv("LUPAFREE_KEYSTORE_PATH")
+            val ksPassword = providers.gradleProperty("LUPAFREE_KEYSTORE_PASSWORD").orNull
+                ?: System.getenv("LUPAFREE_KEYSTORE_PASSWORD")
+            val ksKeyAlias = providers.gradleProperty("LUPAFREE_KEY_ALIAS").orNull
+                ?: System.getenv("LUPAFREE_KEY_ALIAS")
+            val ksKeyPassword = providers.gradleProperty("LUPAFREE_KEY_PASSWORD").orNull
+                ?: System.getenv("LUPAFREE_KEY_PASSWORD")
+
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = ksPassword
+                this.keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
@@ -29,6 +49,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            signingConfig = signingConfigs.findByName("release")?.takeIf {
+                it.storeFile?.exists() == true
+            }
         }
     }
     compileOptions {
