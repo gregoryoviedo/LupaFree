@@ -1,6 +1,5 @@
 package com.example.lupafree.ui
 
-import android.graphics.Bitmap
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -9,6 +8,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -19,8 +19,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+
+enum class CameraError {
+    INITIALIZATION,
+    OPEN
+}
 
 data class MagnifierUiState(
     val zoom: Float = 0f,
@@ -32,8 +39,15 @@ data class MagnifierUiState(
     val minZoomRatio: Float = 1f,
     val maxZoomRatio: Float = 1f,
     val currentZoomRatio: Float = 1f,
-    val errorMessage: String? = null
+    val error: CameraError? = null,
+    val focusPoint: Offset? = null,
+    val isFocusing: Boolean = false
 )
+
+internal fun zoomRatioForLinearZoom(minRatio: Float, maxRatio: Float, linearZoom: Float): Float {
+    val clamped = linearZoom.coerceIn(0f, 1f)
+    return minRatio + (maxRatio - minRatio) * clamped
+}
 
 class MagnifierViewModel : ViewModel() {
 
@@ -42,18 +56,21 @@ class MagnifierViewModel : ViewModel() {
 
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
-    private var currentBitmap: Bitmap? = null
-    private var boundLifecycleOwner: LifecycleOwner? = null
     private var boundPreviewView: PreviewView? = null
+    private var boundLifecycleOwner: LifecycleOwner? = null
+    private val freezeMutex = Mutex()
 
     fun bindCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+        if (camera != null && boundLifecycleOwner === lifecycleOwner && boundPreviewView === previewView) return
+        boundLifecycleOwner = lifecycleOwner
+        boundPreviewView = previewView
         val context = previewView.context.applicationContext
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
             val provider = try {
                 providerFuture.get()
             } catch (t: Throwable) {
-                _state.update { it.copy(errorMessage = "No se pudo inicializar la cámara") }
+                _state.update { it.copy(error = CameraError.INITIALIZATION) }
                 return@addListener
             }
             cameraProvider = provider
@@ -69,13 +86,13 @@ class MagnifierViewModel : ViewModel() {
                     newPreview
                 )
             } catch (t: Throwable) {
-                _state.update { it.copy(errorMessage = "No se pudo abrir la cámara") }
+                _state.update { it.copy(error = CameraError.OPEN) }
                 return@addListener
             }
             camera = cam
             boundLifecycleOwner = lifecycleOwner
             boundPreviewView = previewView
-            _state.update { it.copy(hasFlashUnit = cam.cameraInfo.hasFlashUnit()) }
+            _state.update { it.copy(hasFlashUnit = cam.cameraInfo.hasFlashUnit(), error = null) }
             cam.cameraInfo.zoomState.observe(lifecycleOwner) { zs ->
                 if (zs != null) {
                     val newMin = zs.minZoomRatio
@@ -98,34 +115,57 @@ class MagnifierViewModel : ViewModel() {
         val clamped = value.coerceIn(0f, 1f)
         camera?.cameraControl?.setLinearZoom(clamped)
         _state.update {
-            val ratio = it.minZoomRatio + (it.maxZoomRatio - it.minZoomRatio) * clamped
+            val ratio = zoomRatioForLinearZoom(it.minZoomRatio, it.maxZoomRatio, clamped)
             it.copy(zoom = clamped, currentZoomRatio = ratio)
         }
     }
 
+    fun onPinchZoom(scale: Float) {
+        if (scale <= 0f) return
+        onZoomChange(_state.value.zoom + (scale - 1f) * 0.18f)
+    }
+
+    fun retryCamera() {
+        val owner = boundLifecycleOwner ?: return
+        val preview = boundPreviewView ?: return
+        cameraProvider?.unbindAll()
+        camera = null
+        bindCamera(owner, preview)
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
+    }
+
     fun toggleTorch() {
         val cam = camera ?: return
+        val context = boundPreviewView?.context ?: return
         if (!_state.value.hasFlashUnit) return
         val next = !_state.value.isTorchOn
-        cam.cameraControl.enableTorch(next)
-        _state.update { it.copy(isTorchOn = next) }
+        val future = cam.cameraControl.enableTorch(next)
+        future.addListener({
+            try {
+                future.get()
+                _state.update { it.copy(isTorchOn = next) }
+            } catch (_: Throwable) {
+                _state.update { it.copy(isTorchOn = false) }
+            }
+        }, ContextCompat.getMainExecutor(context))
     }
 
     fun toggleFreeze() {
         val previewView = boundPreviewView ?: return
-        viewModelScope.launch(Dispatchers.Default) {
-            val current = _state.value
-            if (current.isFrozen) {
-                withContext(Dispatchers.Main) {
-                    currentBitmap?.recycle()
-                    currentBitmap = null
+        viewModelScope.launch {
+            freezeMutex.withLock {
+                val current = _state.value
+                if (current.isFrozen) {
+                    _state.update { it.copy(isFrozen = false, frozenImage = null) }
+                } else {
+                    val img = withContext(Dispatchers.Main) {
+                        previewView.getBitmap()?.asImageBitmap()
+                    } ?: return@withLock
+                    _state.update { it.copy(isFrozen = true, frozenImage = img) }
                 }
-                _state.update { it.copy(isFrozen = false, frozenImage = null) }
-            } else {
-                val bmp = withContext(Dispatchers.Main) { previewView.getBitmap() } ?: return@launch
-                currentBitmap = bmp
-                val img = bmp.asImageBitmap()
-                _state.update { it.copy(isFrozen = true, frozenImage = img) }
             }
         }
     }
@@ -146,14 +186,20 @@ class MagnifierViewModel : ViewModel() {
             point,
             FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
         ).setAutoCancelDuration(3, TimeUnit.SECONDS).build()
-        cam.cameraControl.startFocusAndMetering(action)
+        _state.update { it.copy(focusPoint = Offset(clampedX, clampedY), isFocusing = true) }
+        val future = cam.cameraControl.startFocusAndMetering(action)
+        future.addListener({
+            _state.update { it.copy(isFocusing = false) }
+        }, ContextCompat.getMainExecutor(pv.context))
+    }
+
+    fun clearFocusIndicator() {
+        _state.update { it.copy(focusPoint = null, isFocusing = false) }
     }
 
     override fun onCleared() {
         super.onCleared()
         cameraProvider?.unbindAll()
-        currentBitmap?.recycle()
-        currentBitmap = null
         camera = null
         cameraProvider = null
         boundLifecycleOwner = null

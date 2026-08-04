@@ -1,18 +1,50 @@
 <resources>
     <string name="app_name">Lupa Free</string>
-    <string name="permission_required_message">Se necesita acceso a la cámara para usar la lupa.</string>
-    <string name="grant_permission_button">Conceder permiso</string>
-    <string name="open_settings_button">Abrir ajustes</string>
-    <string name="torch_content_description">Linterna</string>
-    <string name="freeze_content_description">Pausar</string>
-    <string name="resume_content_description">Reanudar</string>
+    <string name="permission_required_message">Camera access is required to use the magnifier.</string>
+    <string name="grant_permission_button">Grant permission</string>
+    <string name="open_settings_button">Open settings</string>
+    <string name="torch_content_description">Flashlight</string>
+    <string name="freeze_content_description">Freeze</string>
+    <string name="resume_content_description">Resume</string>
     <string name="zoom_label">Zoom</string>
-    <string name="more_options_content_description">Más opciones</string>
-    <string name="menu_license">Licencia (MIT)</string>
-    <string name="menu_permissions">Permisos</string>
+    <string name="more_options_content_description">More options</string>
+    <string name="menu_license">MIT License</string>
+    <string name="menu_permissions">Permissions</string>
     <string name="menu_github">GitHub</string>
-    <string name="menu_donate">Donar</string>
-    <string name="license_dialog_title">Licencia MIT</string>
-    <string name="license_dialog_close">Cerrar</string>
-    <string name="no_browser_available">No se pudo abrir el enlace</string>
+    <string name="menu_donate">Donate</string>
+    <string name="license_dialog_title">MIT License</string>
+    <string name="license_dialog_close">Close</string>
+    <string name="no_browser_available">Could not open the link</string>
+    <string name="camera_initialization_error">Could not initialize the camera.</string>
+    <string name="camera_open_error">Could not open the camera.</string>
+    <string name="retry_camera_button">Retry</string>
+    <string name="donation_dialog_title">Support Lupa Free</string>
+    <string name="donation_dialog_message">You can support this project through Binance Pay.</string>
+    <string name="binance_pay_id">Binance Pay ID: 371811579</string>
+    <string name="copy_id_button">Copy ID</string>
+    <string name="copied_message">Binance Pay ID copied</string>
+    <string name="close_button">Close</string>
+    <string name="focus_content_description">Focus point</string>
+    <string name="reticle_content_description">Focus reticle</string>
+    <string name="mit_license_text">MIT License
+
+Copyright (c) %1$s %2$s
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</string>
 </resources>

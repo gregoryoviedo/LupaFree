@@ -1,412 +1,174 @@
 # Lupa Free
 
-> Una lupa digital minimalista, ligera y **100 % libre de anuncios** para Android. Sin cuentas, sin telemetría, sin permisos ocultos: solo la cámara, una linterna y un zoom lineal.
+Lupa Free is a small, open-source Android magnifier focused on privacy, clarity, and everyday accessibility. It has no ads, accounts, analytics, or network permission.
 
----
+## Features
 
-## Tabla de contenidos
+- Live rear-camera magnifier powered by CameraX.
+- Hardware-supported zoom shown as a live ratio.
+- Slider and pinch-to-zoom controls.
+- Tap-to-focus with a temporary focus reticle.
+- Flashlight control when the device provides a flash unit.
+- Freeze the current frame in memory without writing it to storage.
+- Camera error feedback and retry action.
+- Spanish, English, German, and Portuguese translations.
+- Automatic device-language selection with English as the fallback.
+- OLED-friendly black interface.
+- MIT license, GitHub access, and Binance Pay donation information.
 
-- [Características](#características)
-- [Capturas](#capturas)
-- [Stack técnico](#stack-técnico)
-- [Arquitectura](#arquitectura)
-- [Estructura del proyecto](#estructura-del-proyecto)
-- [Requisitos](#requisitos)
-- [Compilar e instalar](#compilar-e-instalar)
-- [Build de release (producción)](#build-de-release-producción)
-- [Uso](#uso)
-- [Permisos](#permisos)
-- [Configuración](#configuración)
-- [Decisiones de diseño](#decisiones-de-diseño)
-- [Limitaciones conocidas](#limitaciones-conocidas)
-- [Roadmap](#roadmap)
-- [Contribuir](#contribuir)
-- [Licencia](#licencia)
-- [Créditos](#créditos)
+The app deliberately uses CameraX only. The maximum zoom depends on the camera capabilities exposed by Android and the device manufacturer. It does not attempt to reproduce proprietary camera processing from vendor camera applications.
 
----
+## Screenshots
 
-## Características
+Screenshots will be added under `docs/screenshots/`.
 
-- 🔍 **Zoom lineal** controlado por un slider flotante y translúcido, con etiqueta en vivo del ratio (1.0x–8.0x según hardware).
-- 🔦 **Linterna** (torch) con un toque. El botón se oculta automáticamente en dispositivos sin flash.
-- ❄️ **Congelar frame**: captura el frame actual en memoria (sin tocar disco) y lo muestra como overlay. Toque de nuevo para reanudar el preview en vivo.
-- 🎯 **Enfoque automático** con tap-to-focus. Toque cualquier punto del preview para enfocar ahí (AF + AE con auto-cancel a los 3 s).
-- 📋 **Menú "Más opciones"** (3 puntos) con licencia MIT, acceso a permisos de la app, enlace a GitHub y botón de donación.
-- 🌑 **OLED-friendly**: fondo negro puro, estilo *liquid glass* (superficies translúcidas con borde sutil).
-- 🔒 **Sin red**: el binario no hace ninguna llamada de red. Verificable inspeccionando el código.
-- 🚫 **Sin anuncios, sin trackers, sin SDKs de terceros**.
+## Technology
 
----
+| Layer | Technology |
+| --- | --- |
+| Language | Kotlin 2.4.10 |
+| UI | Jetpack Compose |
+| Material | Material 3 |
+| Camera | CameraX 1.6.1 |
+| Lifecycle | AndroidX Lifecycle 2.11.0 |
+| Build | Android Gradle Plugin 9.3.0 |
+| Minimum Android | Android 11 (API 30) |
+| Compile SDK | 37 |
+| Target SDK | 36 |
 
-## Capturas
+## Project Structure
 
-> _Pendiente: añade capturas en `docs/screenshots/` y reemplaza los enlaces._
-
-| Cámara | Congelado | Menú | Licencia |
-|:---:|:---:|:---:|:---:|
-| _pendiente_ | _pendiente_ | _pendiente_ | _pendiente_ |
-
----
-
-## Stack técnico
-
-| Capa | Tecnología | Versión |
-|---|---|---|
-| Lenguaje | Kotlin | 2.2.10 |
-| UI | Jetpack Compose (BOM) | 2026.02.01 |
-| Material | Material 3 | (via BOM) |
-| Cámara | CameraX (`core`, `camera2`, `lifecycle`, `view`) | 1.4.0 |
-| Lifecycle | `lifecycle-runtime-ktx`, `lifecycle-viewmodel-compose`, `lifecycle-runtime-compose` | 2.6.1 / 2.8.4 |
-| Build | AGP | 9.3.0 |
-| SDK | `minSdk` 30, `targetSdk` 36, `compileSdk` 36 | |
-
-Sin `accompanist`, sin Hilt, sin Room, sin Retrofit: el proyecto cabe en ~600 líneas de Kotlin.
-
----
-
-## Arquitectura
-
-Patrón **MVVM** con un único `ViewModel` y estado expuesto como `StateFlow`. La UI es *stateless*: solo lee estado y dispara intents.
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  MainActivity                                             │
-│    └─ enableEdgeToEdge (SystemBarStyle.dark TRANSPARENT)  │
-│    └─ setContent { LupaFreeTheme + MagnifierScreen() }    │
-└──────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  MagnifierScreen (Compose)                                │
-│    ├─ Permission gate  (rememberLauncherForActivityResult)│
-│    ├─ CameraLayer      (AndroidView + PreviewView)        │
-│    ├─ FreezeOverlay    (Image con bitmap en RAM)          │
-│    ├─ ZoomLabelAndSlider (label + Slider, glass)          │
-│    ├─ TopControlBar    (3 GlassFab: torch, freeze, more)  │
-│    ├─ MoreOptionsSheet (ModalBottomSheet)                 │
-│    └─ LicenseDialog    (AlertDialog con MIT completo)     │
-└──────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  MagnifierViewModel                                       │
-│    ├─ state: StateFlow<MagnifierUiState>                  │
-│    ├─ bindCamera(lifecycleOwner, previewView)             │
-│    ├─ onZoomChange(Float)                                 │
-│    ├─ toggleTorch()                                       │
-│    ├─ toggleFreeze()                                      │
-│    ├─ focusAt(x, y)                                       │
-│    └─ onPermissionResult(Boolean)                         │
-└──────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│  CameraX                                                  │
-│    ├─ ProcessCameraProvider.bindToLifecycle(...)          │
-│    ├─ CameraControl.setLinearZoom(0f..1f)                 │
-│    ├─ CameraControl.enableTorch(Boolean)                  │
-│    ├─ CameraControl.startFocusAndMetering(action)         │
-│    └─ PreviewView.getBitmap()  → ImageBitmap en RAM       │
-└──────────────────────────────────────────────────────────┘
-```
-
-### Estado (`MagnifierUiState`)
-
-```kotlin
-data class MagnifierUiState(
-    val zoom: Float = 0f,
-    val isTorchOn: Boolean = false,
-    val hasFlashUnit: Boolean = false,
-    val isFrozen: Boolean = false,
-    val frozenImage: ImageBitmap? = null,
-    val hasCameraPermission: Boolean = false,
-    val minZoomRatio: Float = 1f,
-    val maxZoomRatio: Float = 1f,
-    val currentZoomRatio: Float = 1f,
-    val errorMessage: String? = null,
-)
-```
-
-### Ciclo de vida de la cámara
-
-- `bindCamera()` llama `ProcessCameraProvider.getInstance(...)` con `addListener` + `ContextCompat.getMainExecutor`.
-- `bindToLifecycle(LocalLifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview)` deja que CameraX abra/cierre la cámara automáticamente con la actividad.
-- `PreviewView.ImplementationMode.COMPATIBLE` (TextureView) es **obligatorio** para que `getBitmap()` funcione al congelar.
-- `onCleared()` hace `provider.unbindAll()` y `bitmap.recycle()` para liberar memoria del frame congelado.
-
-### Freeze frame
-
-No se detiene la cámara. Se captura `PreviewView.getBitmap()` (en `Dispatchers.Main`, marcado `@UiThread`) y se compone como `Image` superpuesto al `PreviewView`. Torch, zoom y focus siguen funcionando debajo del frame congelado. Al descongelar, `bitmap.recycle()` y `currentBitmap = null`.
-
----
-
-## Estructura del proyecto
-
-```
+```text
 LupaFree/
 ├── app/
-│   ├── build.gradle.kts                 ← Cámara, Compose, lifecycle, icons-extended
-│   └── src/main/
-│       ├── AndroidManifest.xml          ← CAMERA, FLASHLIGHT, portrait
-│       ├── java/com/example/lupafree/
-│       │   ├── MainActivity.kt          ← enableEdgeToEdge + host
-│       │   └── ui/
-│       │       ├── MagnifierViewModel.kt   ← Estado + acciones
-│       │       ├── MagnifierScreen.kt      ← UI Compose completa
-│       │       └── theme/
-│       │           ├── Color.kt
-│       │           ├── Theme.kt          ← LupaFreeTheme(darkTheme, dynamicColor)
-│       │           └── Type.kt
-│       └── res/
-│           ├── values/
-│           │   ├── colors.xml
-│           │   ├── strings.xml          ← Textos UI
-│           │   └── themes.xml           ← windowBackground negro
-│           ├── drawable/
-│           ├── mipmap-*/
-│           └── xml/
-├── gradle/
-│   └── libs.versions.toml               ← Catálogo de versiones
-├── build.gradle.kts
-├── settings.gradle.kts
-├── LICENCE.md                           ← Este archivo
-└── README.md                            ← Este archivo
+│   ├── build.gradle.kts
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/example/lupafree/
+│       │   │   ├── MainActivity.kt
+│       │   │   └── ui/
+│       │   │       ├── MagnifierScreen.kt
+│       │   │       ├── MagnifierViewModel.kt
+│       │   │       └── theme/
+│       │   └── res/
+│       │       ├── drawable/
+│       │       ├── mipmap-*/
+│       │       └── values*/
+│       ├── test/
+│       └── androidTest/
+├── gradle/libs.versions.toml
+├── CONTRIBUTING.md
+├── LICENCE.md
+└── README.md
 ```
 
----
+## Requirements
 
-## Requisitos
+- Android Studio with support for AGP 9.3.0.
+- JDK 11 or newer.
+- Android SDK platform 37.
+- A physical Android device or emulator with a rear camera.
 
-- **Android Studio** Ladybug (2024.2.1) o superior (necesario para AGP 9.3).
-- **JDK 11** o superior.
-- **Android SDK** 36 instalado (con `platforms;android-36` y `build-tools;36.x`).
-- **Dispositivo físico o emulador** con Android 11 (API 30) o superior y cámara trasera.
-
----
-
-## Compilar e instalar
-
-### Desde la línea de comandos
+## Build and Install
 
 ```bash
-# Debug APK en app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleDebug
-
-# Instalar en el dispositivo conectado
 ./gradlew :app:installDebug
-
-# Limpiar build
-./gradlew clean
 ```
 
-### Desde Android Studio
-
-1. `File → Open` → seleccionar la carpeta del proyecto.
-2. Esperar a que Gradle termine la sincronización.
-3. `Run → Run 'app'` (Shift+F10) con un dispositivo/emulador conectado.
-
----
-
-## Build de release (producción)
-
-El build de release aplica **R8** (minificación y obfuscación) + **resource shrinking**, y firma el APK con un keystore propio. El resultado es un APK de ~5 MB listo para distribuir.
-
-### 1. Generar el keystore (una sola vez)
+Run the unit tests with:
 
 ```bash
-mkdir -p ~/keystores
-keytool -genkey -v \
-  -keystore ~/keystores/lupafree-release.keystore \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -alias lupafree \
-  -storepass <TU_PASSWORD> \
-  -keypass <TU_PASSWORD> \
-  -dname "CN=Lupa Free, O=Lupa Free Contributors, L=<TU_CIUDAD>, ST=<TU_ESTADO>, C=<TU_PAIS_ISO2>"
+./gradlew :app:testDebugUnitTest
 ```
 
-> 🔒 **Guarda el keystore y la contraseña en un lugar seguro** (gestor de contraseñas, copia offline cifrada). Si los pierdes no podrás actualizar la app en Play Store — Google te obligará a publicarla como app nueva con un `applicationId` distinto.
+Run the Android tests on a connected device or emulator with:
 
-### 2. Configurar las credenciales (fuera del repo)
+```bash
+./gradlew :app:connectedDebugAndroidTest
+```
 
-Añade las siguientes variables a `~/.gradle/gradle.properties` (NO al `gradle.properties` del proyecto):
+## Release Builds
+
+Release signing reads credentials from `~/.gradle/gradle.properties` or environment variables. Never commit a keystore or passwords.
 
 ```properties
-LUPAFREE_KEYSTORE_PATH=/Users/<tu_usuario>/keystores/lupafree-release.keystore
-LUPAFREE_KEYSTORE_PASSWORD=<TU_PASSWORD>
+LUPAFREE_KEYSTORE_PATH=/path/to/lupafree-release.keystore
+LUPAFREE_KEYSTORE_PASSWORD=your-password
 LUPAFREE_KEY_ALIAS=lupafree
-LUPAFREE_KEY_PASSWORD=<TU_PASSWORD>
+LUPAFREE_KEY_PASSWORD=your-password
 ```
 
-El `app/build.gradle.kts` las lee con `providers.gradleProperty(...)` y `System.getenv(...)` como fallback. Así las credenciales nunca se commitean.
-
-### 3. Compilar el APK firmado
+Build a signed release when the keystore exists:
 
 ```bash
 ./gradlew :app:assembleRelease
+./gradlew :app:bundleRelease
 ```
 
-Resultado:
+The release build enables R8 and resource shrinking. Verify the generated artifact on a physical device before distribution.
 
-| Archivo | Tamaño aprox. | Notas |
-|---|---|---|
-| `app/build/outputs/apk/release/app-release.apk` | ~5 MB | Firmado con tu keystore, R8 activo |
+## Usage
 
-> Si el keystore no existe, el build produce `app-release-unsigned.apk` (sin firmar, `adb install` lo rechaza). El build NO falla — degrada silenciosamente.
+1. Open Lupa Free and grant camera access.
+2. Adjust zoom with the slider or pinch gesture.
+3. Tap the preview to focus on a specific point.
+4. Use the flashlight button when additional light is needed.
+5. Freeze and resume the current frame with the pause button.
+6. Open More options for the license, permissions, GitHub, or donation information.
 
-### 4. Instalar en un dispositivo físico
+## Privacy and Permissions
 
-```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
-```
+The app requests only camera access at runtime. The flashlight permission is declared for device compatibility. No Internet, storage, location, microphone, account, or tracking permission is used.
 
-### 5. Verificar la firma (opcional)
+Frozen frames remain in memory and are not saved to disk. The app contains no analytics, advertising SDK, or remote service.
 
-```bash
-$ANDROID_HOME/build-tools/<version>/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
-```
+## Donation
 
-Debe mostrar el DN que pusiste en el paso 1.
+Donations are supported through Binance Pay.
 
-### Comparativa de tamaños
+**Binance Pay ID:** `371811579`
 
-| Build | Tamaño | R8 | Recursos | Firmado |
-|---|---:|:---:|:---:|:---:|
-| `assembleDebug` | ~68 MB | ❌ | ❌ | ❌ (debug key) |
-| `assembleRelease` | ~5 MB | ✅ | ✅ | ✅ |
+## Configuration
 
-### Subir a Play Store
+The application links are defined in `app/src/main/java/com/example/lupafree/ui/MagnifierScreen.kt`.
 
-1. Crea la app en [Google Play Console](https://play.google.com/console).
-2. Activa **Play App Signing** (recomendado): Google guarda una copia de seguridad de tu clave y la usa para firmar las actualizaciones que subas.
-3. Sube `app-release.apk` o, preferiblemente, genera un **Android App Bundle**:
-   ```bash
-   ./gradlew :app:bundleRelease
-   # Resultado: app/build/outputs/bundle/release/app-release.aab
-   ```
-   El AAB es el formato que Google prefiere desde agosto de 2021 — genera APKs optimizados por dispositivo en su servidor.
+Translations are stored in:
 
----
+- `app/src/main/res/values/strings.xml` for English and fallback text.
+- `app/src/main/res/values-es/strings.xml` for Spanish.
+- `app/src/main/res/values-de/strings.xml` for German.
+- `app/src/main/res/values-pt/strings.xml` for Portuguese.
 
-## Uso
+Android selects the closest matching device locale. English is used when no supported translation matches.
 
-1. Abre **Lupa Free** desde el lanzador.
-2. Acepta el permiso de cámara cuando el sistema lo solicite.
-3. Apunta a lo que quieras ampliar.
-4. **Desliza el slider** inferior para hacer zoom (1.0x → máximo del sensor).
-5. **Toca el icono de rayo** para encender/apagar la linterna.
-6. **Toca el icono de pausa** para congelar el frame actual. Toca de nuevo (icono ▶) para reanudar.
-7. **Toca cualquier punto** del preview para reenfocar ahí.
-8. **Toca los 3 puntos** (esquina superior derecha) para abrir el menú (licencia, permisos, GitHub, donar).
+## Known Limitations
 
-La pantalla se mantiene encendida mientras la app está en primer plano (no requiere `WAKE_LOCK`).
-
----
-
-## Permisos
-
-| Permiso | Por qué | Obligatorio |
-|---|---|---|
-| `android.permission.CAMERA` | Renderizar el preview y aplicar zoom/focus | Sí |
-| `android.permission.FLASHLIGHT` | Encender la linterna (declarado por el SO en algunos OEM) | Sí |
-| `<uses-feature android:name="android.hardware.camera" android:required="true" />` | Filtra dispositivos sin cámara en Play Store | — |
-
-**No solicita** `INTERNET`, `ACCESS_NETWORK_STATE`, ni ningún permiso de almacenamiento: el frame congelado vive exclusivamente en RAM.
-
----
-
-## Configuración
-
-### Cambiar los enlaces del menú
-
-Edita el objeto `AppLinks` en `app/src/main/java/com/example/lupafree/ui/MagnifierScreen.kt`:
-
-```kotlin
-private object AppLinks {
-    const val GITHUB = "https://github.com/your-username/lupafree"
-    const val DONATE = "https://github.com/sponsors/your-username"
-}
-```
-
-### Cambiar el autor / año de la licencia MIT
-
-Edita las dos constantes en el mismo archivo:
-
-```kotlin
-private const val MIT_LICENSE_YEAR = "2024"
-private const val MIT_LICENSE_AUTHOR = "Lupa Free Contributors"
-```
-
-El texto completo del diálogo `LicenseDialog` se reconstruye a partir de estas constantes.
-
-### Cambiar el color de fondo OLED
-
-`MagnifierScreen` raíz usa `Color.Black` (`#000000`). Si prefieres un negro menos profundo (que disimule mejor el banding OLED en grises muy oscuros), cambia a `Color(0xFF050505)`.
-
----
-
-## Decisiones de diseño
-
-- **Sin blur real (RenderEffect)**: requiere API 31+. Se simula el efecto "liquid glass" con superficies translúcidas (`Color.Black.copy(alpha = 0.40f)`) + borde sutil (`Color.White.copy(alpha = 0.20f)`) + `elevation = 0.dp`. Compatible con `minSdk = 30`.
-- **`PreviewView.ImplementationMode.COMPATIBLE`** y no `PERFORMANCE`: el primero usa `TextureView` y permite `getBitmap()`; el segundo usa `SurfaceView` que no expone bitmap. La diferencia de rendimiento en dispositivos modernos es despreciable.
-- **`PreviewView.ScaleType.FILL_CENTER`**: llena la pantalla recortando bordes, sin letterboxing. Ideal para una lupa.
-- **Slider con `valueRange = 0f..1f`**: el `linearZoom` de CameraX es continuo y normalizado. El ratio real (`1.0x..maxZoomRatio`) se calcula en el ViewModel y se muestra como etiqueta.
-- **Sin Hilt ni Koin**: el ViewModel se obtiene con `viewModel()` del scope por defecto (la Activity). Para una app tan pequeña, un contenedor de DI sería sobreingeniería.
-- **Sin Room/DataStore**: la app no persiste nada entre sesiones (cero estado en disco).
-- **Orientación bloqueada a portrait** (`android:screenOrientation="portrait"`): la cámara y la UI están optimizadas para vertical; rotar añadiría complejidad de reinicio de `PreviewView` sin beneficio real.
-- **`windowBackground = @android:color/black`** en `themes.xml`: evita el "flash" blanco del splash del sistema al hacer cold start.
-
----
-
-## Limitaciones conocidas
-
-- **Una sola cámara**: solo la trasera. No hay selector frontal/trasera.
-- **Sin captura a archivo**: el freeze es in-memory. Si el sistema mata la app, el frame se pierde. Esto es deliberado (ver "Sin rastreo" arriba).
-- **Sin grabación de vídeo**: solo preview en vivo.
-- **Sin pinch-to-zoom**: el zoom solo se controla con el slider, por precisión.
-- **Sin historial de medidas**: si más adelante se añaden retículas o medición, no hay persistencia.
-- **Traducción**: la UI está en español. No hay `values-en/strings.xml` aún.
-
----
+- Only the rear camera is selected.
+- Zoom is limited to the range reported by CameraX and the device camera HAL.
+- The app does not use manufacturer-specific camera APIs or proprietary super-resolution.
+- Frozen frames are intentionally not persisted.
+- Video recording and image export are not included.
 
 ## Roadmap
 
-- [ ] `values-en/strings.xml` con la UI en inglés.
-- [ ] Selector de cámara frontal/trasera.
-- [ ] Pinch-to-zoom opcional (toggle en el menú).
-- [ ] Retícula de medición con calibración por objeto de referencia (tarjeta de crédito, etc.).
-- [ ] Captura opcional a archivo (con un interruptor on/off explícito).
-- [ ] Tema claro automático cuando el sistema lo pida (override del OLED black).
-- [ ] Tests de UI con `createAndroidComposeRule<ComponentActivity>` y un fake `MagnifierViewModel`.
+- Optional camera selector.
+- Optional image capture with explicit storage behavior.
+- Improved focus and exposure feedback.
+- Additional accessibility refinements.
+- More device compatibility testing.
 
----
+## Contributing
 
-## Contribuir
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, testing, and design guidelines.
 
-Pull requests bienvenidos. Antes:
+## License
 
-1. Asegúrate de que `./gradlew :app:assembleDebug` pasa sin warnings.
-2. Mantén la app libre de dependencias que requieran red, anuncios o tracking.
-3. Respeta el minimalismo: si una feature requiere más de ~100 líneas de código, plantéalo primero en un *issue*.
+Lupa Free is distributed under the MIT License. See [LICENCE.md](LICENCE.md).
 
----
+Copyright (c) 2026 Gregory Oviedo.
 
-## Licencia
+## Credits
 
-Este proyecto se distribuye bajo la **Licencia MIT**. Ver [`LICENCE.md`](./LICENCE.md) para el texto completo.
-
-```
-MIT License — Copyright (c) 2024 Lupa Free Contributors
-```
-
----
-
-## Créditos
-
-- **CameraX** — AndroidX / Google.
-- **Jetpack Compose** y **Material 3** — AndroidX / Google.
-- Iconos — [Material Symbols](https://fonts.google.com/icons) (Apache 2.0).
-
-Sin frameworks de UI de terceros, sin assets descargados en runtime, sin servicios externos.
+- CameraX, Jetpack Compose, Material 3, and AndroidX are provided by Google and the Android Open Source Project.
+- The launcher icon is an original minimal vector asset for Lupa Free.

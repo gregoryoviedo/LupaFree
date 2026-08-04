@@ -2,11 +2,14 @@ package com.example.lupafree.ui
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
@@ -15,6 +18,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,11 +74,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,36 +102,12 @@ private val SheetContainerColor = Color(0xFF121212)
 private val DialogContainerColor = Color(0xFF1A1A1A)
 
 private object AppLinks {
-    const val GITHUB = "https://github.com/your-username/lupafree"
-    const val DONATE = "https://github.com/sponsors/your-username"
+    const val GITHUB = "https://github.com/gregoryoviedo/LupaFree"
 }
 
-private const val MIT_LICENSE_YEAR = "2024"
-private const val MIT_LICENSE_AUTHOR = "Lupa Free Contributors"
-
-private val MIT_LICENSE_TEXT = """
-MIT License
-
-Copyright (c) $MIT_LICENSE_YEAR $MIT_LICENSE_AUTHOR
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-""".trimIndent()
+private const val MIT_LICENSE_YEAR = "2026"
+private const val MIT_LICENSE_AUTHOR = "Gregory Oviedo"
+private const val BINANCE_PAY_ID = "371811579"
 
 @Composable
 fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
@@ -136,6 +120,7 @@ fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
     var denialCount by remember { mutableStateOf(0) }
     var showSheet by remember { mutableStateOf(false) }
     var showLicenseDialog by remember { mutableStateOf(false) }
+    var showDonationDialog by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -190,9 +175,15 @@ fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
         if (state.hasCameraPermission) {
             CameraLayer(
                 state = state,
-                viewModel = viewModel
+                viewModel = viewModel,
+                onPinchZoom = viewModel::onPinchZoom
             )
             FreezeOverlay(image = state.frozenImage, isFrozen = state.isFrozen)
+            FocusReticle(
+                point = state.focusPoint,
+                isFocusing = state.isFocusing,
+                onFinished = viewModel::clearFocusIndicator
+            )
             ZoomLabelAndSlider(
                 zoom = state.zoom,
                 ratio = state.currentZoomRatio,
@@ -203,6 +194,14 @@ fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
             )
+            state.error?.let { cameraError ->
+                CameraErrorBanner(
+                    error = cameraError,
+                    onRetry = viewModel::retryCamera,
+                    onDismiss = viewModel::clearError,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
             TopControlBar(
                 state = state,
                 onToggleTorch = viewModel::toggleTorch,
@@ -239,7 +238,7 @@ fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
             },
             onDonateClick = {
                 showSheet = false
-                openUrl(context, AppLinks.DONATE)
+                showDonationDialog = true
             }
         )
     }
@@ -247,12 +246,19 @@ fun MagnifierScreen(viewModel: MagnifierViewModel = viewModel()) {
     if (showLicenseDialog) {
         LicenseDialog(onDismiss = { showLicenseDialog = false })
     }
+    if (showDonationDialog) {
+        DonationDialog(
+            onDismiss = { showDonationDialog = false },
+            context = context
+        )
+    }
 }
 
 @Composable
 private fun CameraLayer(
     state: MagnifierUiState,
-    viewModel: MagnifierViewModel
+    viewModel: MagnifierViewModel,
+    onPinchZoom: (Float) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -273,12 +279,71 @@ private fun CameraLayer(
                     viewModel.focusAt(offset.x, offset.y)
                 }
             }
+            .pointerInput(previewView) {
+                detectTransformGestures { _, _, zoom, _ ->
+                    onPinchZoom(zoom)
+                }
+            }
     )
 
     LaunchedEffect(previewView) {
         viewModel.bindCamera(lifecycleOwner, previewView)
         previewView.post {
             viewModel.focusAt(previewView.width / 2f, previewView.height / 2f)
+        }
+    }
+}
+
+@Composable
+private fun FocusReticle(
+    point: androidx.compose.ui.geometry.Offset?,
+    isFocusing: Boolean,
+    onFinished: () -> Unit
+) {
+    if (point == null) return
+    val reticleDescription = stringResource(R.string.reticle_content_description)
+    LaunchedEffect(point) {
+        kotlinx.coroutines.delay(1200)
+        onFinished()
+    }
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { contentDescription = reticleDescription }
+    ) {
+        drawCircle(
+            color = if (isFocusing) Color.White else Color(0xFF9CCC65),
+            radius = 28.dp.toPx(),
+            center = point,
+            style = Stroke(width = 2.dp.toPx())
+        )
+    }
+}
+
+@Composable
+private fun CameraErrorBanner(
+    error: CameraError,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val message = when (error) {
+        CameraError.INITIALIZATION -> stringResource(R.string.camera_initialization_error)
+        CameraError.OPEN -> stringResource(R.string.camera_open_error)
+    }
+    Surface(
+        modifier = modifier.padding(24.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = DialogContainerColor,
+        contentColor = Color.White,
+        border = GlassBorder
+    ) {
+        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = message, fontSize = 16.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.close_button)) }
+                Button(onClick = onRetry) { Text(stringResource(R.string.retry_camera_button)) }
+            }
         }
     }
 }
@@ -291,7 +356,7 @@ private fun FreezeOverlay(
     if (isFrozen && image != null) {
         Image(
             bitmap = image,
-            contentDescription = null,
+            contentDescription = stringResource(R.string.freeze_content_description),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -519,7 +584,11 @@ private fun LicenseDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = MIT_LICENSE_TEXT,
+                    text = stringResource(
+                        R.string.mit_license_text,
+                        MIT_LICENSE_YEAR,
+                        MIT_LICENSE_AUTHOR
+                    ),
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
                     color = Color.White.copy(alpha = 0.9f)
@@ -532,6 +601,47 @@ private fun LicenseDialog(onDismiss: () -> Unit) {
                     text = stringResource(R.string.license_dialog_close),
                     color = Color.White
                 )
+            }
+        },
+        containerColor = DialogContainerColor,
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+@Composable
+private fun DonationDialog(onDismiss: () -> Unit, context: Context) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.donation_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.donation_dialog_message))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = GlassBackground,
+                    border = GlassBorder
+                ) {
+                    Text(
+                        text = stringResource(R.string.binance_pay_id),
+                        modifier = Modifier.padding(12.dp),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Binance Pay ID", BINANCE_PAY_ID))
+                Toast.makeText(context, R.string.copied_message, Toast.LENGTH_SHORT).show()
+            }) {
+                Text(stringResource(R.string.copy_id_button), color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close_button), color = Color.White)
             }
         },
         containerColor = DialogContainerColor,
@@ -581,6 +691,7 @@ private fun openUrl(context: Context, url: String) {
     try {
         context.startActivity(intent)
     } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, R.string.no_browser_available, Toast.LENGTH_SHORT).show()
     }
 }
 

@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Lupa Free</string>
+    <string name="permission_required_message">Für die Lupe wird Kamerazugriff benötigt.</string>
+    <string name="grant_permission_button">Berechtigung erteilen</string>
+    <string name="open_settings_button">Einstellungen öffnen</string>
+    <string name="torch_content_description">Taschenlampe</string>
+    <string name="freeze_content_description">Anhalten</string>
+    <string name="resume_content_description">Fortsetzen</string>
+    <string name="zoom_label">Zoom</string>
+    <string name="more_options_content_description">Weitere Optionen</string>
+    <string name="menu_license">Lizenz (MIT)</string>
+    <string name="menu_permissions">Berechtigungen</string>
+    <string name="menu_github">GitHub</string>
+    <string name="menu_donate">Spenden</string>
+    <string name="license_dialog_title">MIT-Lizenz</string>
+    <string name="license_dialog_close">Schließen</string>
+    <string name="no_browser_available">Link konnte nicht geöffnet werden</string>
+    <string name="camera_initialization_error">Kamera konnte nicht initialisiert werden.</string>
+    <string name="camera_open_error">Kamera konnte nicht geöffnet werden.</string>
+    <string name="retry_camera_button">Erneut versuchen</string>
+    <string name="donation_dialog_title">Lupa Free unterstützen</string>
+    <string name="donation_dialog_message">Du kannst dieses Projekt über Binance Pay unterstützen.</string>
+    <string name="binance_pay_id">Binance-Pay-ID: 371811579</string>
+    <string name="copy_id_button">ID kopieren</string>
+    <string name="copied_message">Binance-Pay-ID kopiert</string>
+    <string name="close_button">Schließen</string>
+    <string name="focus_content_description">Fokuspunkt</string>
+    <string name="reticle_content_description">Fokus-Retikel</string>
+</resources>

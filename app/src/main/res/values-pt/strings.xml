@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Lupa Free</string>
+    <string name="permission_required_message">É necessário acesso à câmera para usar a lupa.</string>
+    <string name="grant_permission_button">Conceder permissão</string>
+    <string name="open_settings_button">Abrir configurações</string>
+    <string name="torch_content_description">Lanterna</string>
+    <string name="freeze_content_description">Pausar</string>
+    <string name="resume_content_description">Retomar</string>
+    <string name="zoom_label">Zoom</string>
+    <string name="more_options_content_description">Mais opções</string>
+    <string name="menu_license">Licença (MIT)</string>
+    <string name="menu_permissions">Permissões</string>
+    <string name="menu_github">GitHub</string>
+    <string name="menu_donate">Doar</string>
+    <string name="license_dialog_title">Licença MIT</string>
+    <string name="license_dialog_close">Fechar</string>
+    <string name="no_browser_available">Não foi possível abrir o link</string>
+    <string name="camera_initialization_error">Não foi possível inicializar a câmera.</string>
+    <string name="camera_open_error">Não foi possível abrir a câmera.</string>
+    <string name="retry_camera_button">Tentar novamente</string>
+    <string name="donation_dialog_title">Apoie o Lupa Free</string>
+    <string name="donation_dialog_message">Você pode apoiar este projeto pelo Binance Pay.</string>
+    <string name="binance_pay_id">ID do Binance Pay: 371811579</string>
+    <string name="copy_id_button">Copiar ID</string>
+    <string name="copied_message">ID do Binance Pay copiado</string>
+    <string name="close_button">Fechar</string>
+    <string name="focus_content_description">Ponto de foco</string>
+    <string name="reticle_content_description">Retícula de foco</string>
+</resources>
